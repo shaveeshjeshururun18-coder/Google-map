@@ -1,0 +1,6 @@
+{
+  "name": "Real Street View Drive",
+  "description": "Immersive real-world 360-degree Street View driving simulator powered by Google Street View Tiles API, Places API (New), and Three.js.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
