@@ -7,15 +7,19 @@ import {
   ChevronUp,
   Compass,
   Eye,
+  Globe,
   Map as MapIcon,
   Maximize2,
   Minimize2,
   Navigation,
   RefreshCw,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import type {
   DeadEndStatus,
+  DriveMode,
   DrivingInputState,
   DrivingTelemetry,
   GearMode,
@@ -39,8 +43,13 @@ import { MiniMap } from '../MiniMap/MiniMap';
 import { Speedometer } from '../Speedometer/Speedometer';
 
 interface DashboardProps {
+  driveMode: DriveMode;
+  world3dAvailable: boolean;
+  world3dLabel: string;
+  world3dCoords: { lat: number; lng: number };
   renderBackend?: 'tiles' | 'maps-js';
   vehicleType: VehicleType;
+  soundMuted: boolean;
   currentMetadata: PanoramaMetadata | null;
   telemetry: DrivingTelemetry;
   transition: TransitionState;
@@ -54,8 +63,11 @@ interface DashboardProps {
   error: SimulatorError | null;
   coverageNotice: string | null;
   quotaExceeded: boolean;
+  onChangeDriveMode: (mode: DriveMode) => void;
   onInputChange: <K extends keyof DrivingInputState>(key: K, active: boolean) => void;
   onChangeVehicleType: (type: VehicleType) => void;
+  onToggleCruise: () => void;
+  onToggleSound: () => void;
   onSetGear: (gear: GearMode) => void;
   onStepDirection: (direction: 'forward' | 'left' | 'right' | 'reverse') => void;
   onSelectEdge: (edge: PanoramaEdge) => void;
@@ -74,8 +86,13 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
+  driveMode,
+  world3dAvailable,
+  world3dLabel,
+  world3dCoords,
   renderBackend = 'tiles',
   vehicleType,
+  soundMuted,
   currentMetadata,
   telemetry,
   transition,
@@ -89,8 +106,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   error,
   coverageNotice,
   quotaExceeded,
+  onChangeDriveMode,
   onInputChange,
   onChangeVehicleType,
+  onToggleCruise,
+  onToggleSound,
   onSetGear,
   onStepDirection,
   onSelectEdge,
@@ -150,7 +170,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const hasLoadedPanorama = Boolean(currentMetadata);
+  const is3DWorld = driveMode === '3d-world';
+  const hasLoadedPanorama = is3DWorld ? !isInitializing : Boolean(currentMetadata);
   const showBlockingError = Boolean(error) && !hasLoadedPanorama;
 
   return (
@@ -180,7 +201,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <h1 className="font-instrument text-sm sm:text-base font-bold tracking-tight text-slate-50 whitespace-nowrap">
             Real Street View Drive
           </h1>
-          {currentMetadata ? (
+          {is3DWorld ? (
+            <div
+              className="flex items-center gap-1.5 text-xs text-slate-200 truncate max-w-[200px] sm:max-w-[340px]"
+              data-testid="current-location-label"
+            >
+              <span className="font-semibold text-cyan-300 truncate">{world3dLabel}</span>
+              <span className="text-slate-400 hidden lg:inline" aria-hidden="true">·</span>
+              <span className="font-telemetry text-[11px] text-slate-200 hidden lg:inline whitespace-nowrap">
+                {formatCoordinates(world3dCoords.lat, world3dCoords.lng)}
+              </span>
+            </div>
+          ) : currentMetadata ? (
             <div
               className="flex items-center gap-1.5 text-xs text-slate-200 truncate max-w-[200px] sm:max-w-[340px]"
               data-testid="current-location-label"
@@ -203,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           ) : (
             <span className="text-xs text-slate-300 whitespace-nowrap">
-              {isInitializing ? 'Loading real panorama...' : 'Ready to connect'}
+              {isInitializing ? 'Loading real world...' : 'Ready to connect'}
             </span>
           )}
         </div>
@@ -222,6 +254,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Right: Concise Utility Actions */}
         <div className="flex items-center gap-1.5 shrink-0 order-2 sm:order-3">
+          {/* Drive Mode Switcher: Continuous 3D World vs Street View */}
+          {world3dAvailable && (
+            <div
+              className="flex items-center h-9 p-0.5 rounded-lg bg-[#0B0E14]/90 border border-white/12 shrink-0"
+              role="group"
+              aria-label="Driving world mode selector"
+              data-testid="drive-mode-switcher"
+            >
+              <button
+                type="button"
+                onClick={() => onChangeDriveMode('3d-world')}
+                aria-pressed={driveMode === '3d-world'}
+                aria-label="Continuous 3D World Mode (G)"
+                title="Continuous 3D World — Zero transitions, 320 km/h (G)"
+                className={`h-full px-2 rounded-md text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                  driveMode === '3d-world'
+                    ? 'bg-cyan-400 text-slate-950 font-semibold'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden md:inline">3D World</span>
+                <span className="md:hidden">3D</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeDriveMode('street-view')}
+                aria-pressed={driveMode === 'street-view'}
+                aria-label="Street View Panorama Mode (G)"
+                title="Street View 360° Mode (G)"
+                className={`h-full px-2 rounded-md text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                  driveMode === 'street-view'
+                    ? 'bg-amber-500 text-slate-950 font-semibold'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden md:inline">Street View</span>
+                <span className="md:hidden">SV</span>
+              </button>
+            </div>
+          )}
           {/* 3D Vehicle Switcher: Sports Car / Sport Bike */}
           <div
             className="flex items-center h-9 p-0.5 rounded-lg bg-[#0B0E14]/90 border border-white/12 shrink-0"
@@ -261,7 +335,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           </div>
 
-          {renderBackend === 'tiles' && (
+          <button
+            type="button"
+            onClick={onToggleSound}
+            aria-label={soundMuted ? 'Unmute engine audio' : 'Mute engine audio'}
+            aria-pressed={!soundMuted}
+            title={soundMuted ? 'Unmute Engine Sound' : 'Mute Engine Sound'}
+            className={`h-9 w-9 rounded-lg border flex items-center justify-center transition-colors shrink-0 ${
+              soundMuted
+                ? 'bg-[#0B0E14]/90 border-white/12 text-slate-400 hover:text-white'
+                : 'bg-[#0B0E14]/90 border-amber-400/35 text-amber-300 hover:bg-white/10'
+            }`}
+          >
+            {soundMuted ? (
+              <VolumeX className="w-4 h-4" aria-hidden="true" />
+            ) : (
+              <Volume2 className="w-4 h-4" aria-hidden="true" />
+            )}
+          </button>
+
+          {!is3DWorld && renderBackend === 'tiles' && (
             <>
               <label htmlFor="tile-quality-select" className="sr-only">
                 Panorama tile resolution quality
@@ -342,7 +435,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         />
 
         {/* Coverage Warning / Dead End Notice */}
-        {(coverageNotice || (hasLoadedPanorama && deadEndStatus.isDeadEnd)) && (
+        {(coverageNotice || (!is3DWorld && hasLoadedPanorama && deadEndStatus.isDeadEnd)) && (
           <div
             role="status"
             data-testid="coverage-warning"
@@ -466,7 +559,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {miniMapOpen && hasLoadedPanorama && (
           <div className="absolute right-3 sm:right-5 top-2 z-20">
             <MiniMap
-              currentMetadata={currentMetadata}
+              currentMetadata={
+                is3DWorld
+                  ? {
+                      panoId: 'world-3d-live',
+                      lat: world3dCoords.lat,
+                      lng: world3dCoords.lng,
+                      originalLat: world3dCoords.lat,
+                      originalLng: world3dCoords.lng,
+                      heading: telemetry.heading,
+                      tilt: 0,
+                      roll: 0,
+                      imageWidth: 0,
+                      imageHeight: 0,
+                      tileWidth: 0,
+                      tileHeight: 0,
+                      copyright: 'Google Maps 3D',
+                      reportProblemLink: '',
+                      date: '',
+                      imageryType: 'outdoor',
+                      streetName: world3dLabel,
+                      formattedLocation: world3dLabel,
+                      links: [],
+                    }
+                  : currentMetadata
+              }
               heading={telemetry.heading}
               nodes={graphNodes}
               edges={graphEdges}
@@ -478,10 +595,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* Bottom Area: Collapsible Cockpit Dock + Mandatory Google Street View Attribution */}
+      {/* Bottom Area: Collapsible Cockpit Dock + Mandatory Google Attribution */}
       <footer
         className={`w-full px-3 sm:px-5 flex flex-col items-center gap-2 pointer-events-none ${
-          renderBackend === 'maps-js' ? 'pb-7' : 'pb-3'
+          is3DWorld || renderBackend === 'maps-js' ? 'pb-7' : 'pb-3'
         }`}
       >
         {/* Collapse / Expand HUD toggle */}
@@ -510,20 +627,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <section
             aria-label="Driving Simulator Dashboard"
             data-testid="cockpit-dock"
-            className="pointer-events-auto w-full max-w-[960px] bg-[#0B0E14]/92 border border-white/12 rounded-xl px-4 py-3 shadow-2xl flex flex-col md:flex-row items-stretch md:items-center gap-4"
+            className="pointer-events-auto w-full max-w-[980px] bg-[#0B0E14]/92 border border-white/12 rounded-xl px-4 py-3 shadow-2xl flex flex-col md:flex-row items-stretch md:items-center gap-4"
           >
             <div className="md:border-r md:border-white/10 md:pr-4 shrink-0">
-              <Speedometer telemetry={telemetry} />
+              <Speedometer telemetry={telemetry} driveMode={driveMode} />
             </div>
 
             <div className="flex-1 min-w-0">
               <DrivingControls
+                driveMode={driveMode}
                 telemetry={telemetry}
                 rankedNeighbours={rankedNeighbours}
                 onInputChange={onInputChange}
                 onSetGear={onSetGear}
+                onToggleCruise={onToggleCruise}
                 onStepDirection={onStepDirection}
                 onSelectEdge={onSelectEdge}
+                onSwitchToStreetView={() => onChangeDriveMode('street-view')}
                 disabled={!hasLoadedPanorama}
               />
             </div>
@@ -531,20 +651,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
 
         {/* Bottom Legal & Keyboard Hint Row */}
-        <div className="w-full max-w-[1400px] flex items-center justify-between gap-4 text-[11px] text-slate-200 px-1">
+        <div className="w-full max-w-[1400px] flex items-center justify-center gap-4 text-[11px] text-slate-200 px-1">
           <div className="hidden sm:flex items-center gap-2 pointer-events-none bg-[#0B0E14]/80 px-2.5 py-1 rounded border border-white/10 text-slate-200">
             <span>W/S Drive &amp; Brake</span>
             <span className="text-slate-500" aria-hidden="true">·</span>
+            <span className="text-cyan-300 font-medium">Shift Turbo</span>
+            <span className="text-slate-500" aria-hidden="true">·</span>
             <span>A/D Steer</span>
             <span className="text-slate-500" aria-hidden="true">·</span>
-            <span>Q/E Lane Shift</span>
+            <span>Q/E Swerve</span>
             <span className="text-slate-500" aria-hidden="true">·</span>
             <span>V Car/Bike</span>
-            <span className="text-slate-500" aria-hidden="true">·</span>
-            <span>Drag to look 360°</span>
+            {world3dAvailable && (
+              <>
+                <span className="text-slate-500" aria-hidden="true">·</span>
+                <span>G 3D/Street</span>
+              </>
+            )}
           </div>
 
-          {renderBackend === 'tiles' && (
+          {!is3DWorld && renderBackend === 'tiles' && (
             <div
               className="pointer-events-auto ml-auto flex items-center gap-2 bg-[#0B0E14]/82 px-2.5 py-1 rounded border border-white/10 text-slate-300"
               data-testid="streetview-attribution"

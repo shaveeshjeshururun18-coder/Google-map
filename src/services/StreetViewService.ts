@@ -59,14 +59,24 @@ export class StreetViewService {
     this.metadataService = new PanoramaMetadataService(safeFetch, apiBase);
   }
 
-  public async checkServerConfig(): Promise<{ apiConfigured: boolean }> {
+  public async checkServerConfig(): Promise<{
+    apiConfigured: boolean;
+    tilesApiAvailable?: boolean;
+  }> {
     try {
       const res = await this.fetchImpl('/api/config');
-      if (!res.ok) return { apiConfigured: false };
-      const data = (await res.json()) as { apiConfigured?: boolean };
-      return { apiConfigured: Boolean(data.apiConfigured) };
+      if (!res.ok) return { apiConfigured: false, tilesApiAvailable: false };
+      const data = (await res.json()) as {
+        apiConfigured?: boolean;
+        tilesApiAvailable?: boolean;
+      };
+      return {
+        apiConfigured: Boolean(data.apiConfigured),
+        tilesApiAvailable:
+          typeof data.tilesApiAvailable === 'boolean' ? data.tilesApiAvailable : undefined,
+      };
     } catch {
-      return { apiConfigured: false };
+      return { apiConfigured: false, tilesApiAvailable: false };
     }
   }
 

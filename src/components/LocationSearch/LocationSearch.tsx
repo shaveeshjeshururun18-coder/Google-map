@@ -8,6 +8,7 @@ interface LocationSearchProps {
   onSelectSuggestion: (suggestion: PlaceSuggestion) => Promise<void>;
   onSelectPlace: (place: PlaceResult) => Promise<void>;
   onLocateDevice: () => void;
+  isLocating?: boolean;
   disabled?: boolean;
 }
 
@@ -17,6 +18,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
   onSelectSuggestion,
   onSelectPlace,
   onLocateDevice,
+  isLocating = false,
   disabled = false,
 }) => {
   const [query, setQuery] = useState('');
@@ -234,12 +236,24 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
         <button
           type="button"
           onClick={onLocateDevice}
-          disabled={disabled}
+          disabled={disabled || isLocating}
+          data-testid="locate-device-btn"
           aria-label="Drive near my current GPS location"
-          title="Use my current location"
-          className="p-1.5 sm:p-2 mr-0.5 sm:mr-1 text-slate-400 hover:text-amber-400 transition-colors shrink-0 disabled:opacity-40"
+          title="Jump to my current location"
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 mr-1 rounded-md text-xs font-medium transition-colors shrink-0 disabled:opacity-50 ${
+            isLocating
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+              : 'text-slate-300 hover:text-amber-400 hover:bg-white/8'
+          }`}
         >
-          <Crosshair className="w-4 h-4" aria-hidden="true" />
+          {isLocating ? (
+            <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" aria-hidden="true" />
+          ) : (
+            <Crosshair className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+          )}
+          <span className="hidden sm:inline">
+            {isLocating ? 'Locating...' : 'My Location'}
+          </span>
         </button>
       </form>
 

@@ -103,15 +103,54 @@ test('DrivingController responds immediately to sudden left/right lane shifts an
   const rightStep = controller.step(0.06);
   assert.ok(rightStep.lateralOffset > 0.2, `Expected sudden right shift, got ${rightStep.lateralOffset}`);
 
-  // Rapid steering via steerRight input
+  // Rapid steering via steerRight input (progressive weave -> corner ramp)
   const startHeading = controller.getTelemetry().heading;
   controller.setInput('steerRight', true);
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     controller.step(0.05);
   }
   const afterSteer = controller.getTelemetry();
-  assert.ok(afterSteer.heading > startHeading + 20, `Expected rapid heading turn, got ${afterSteer.heading}`);
+  assert.ok(afterSteer.heading > startHeading + 20, `Expected responsive heading turn, got ${afterSteer.heading}`);
   assert.ok(afterSteer.steeringAngle > 0.5, `Expected crisp steering angle, got ${afterSteer.steeringAngle}`);
+});
+
+test('DrivingController runs Cruise control, shifts virtual gears with RPM sync, and produces drift slip on high-speed swerves', () => {
+  const nav = setupRoadCorridor();
+  const controller = new DrivingController(nav);
+  controller.setCurrentPanorama('road-1', 90);
+
+  assert.equal(controller.toggleCruise(), true);
+  let sawUpshift = false;
+  for (let i = 0; i < 20; i += 1) {
+    const t = controller.step(0.08);
+    if (t.justShiftedGear) sawUpshift = true;
+  }
+
+  const cruising = controller.getTelemetry();
+  assert.ok(cruising.cruiseEnabled);
+  assert.ok(cruising.speedKmh > 65, `Expected Cruise speed > 65 km/h, got ${cruising.speedKmh}`);
+  assert.ok(cruising.virtualGear >= 3, `Expected virtual gear >= 3, got ${cruising.virtualGear}`);
+  assert.ok(sawUpshift, 'Expected virtual gearbox upshift pulse during acceleration');
+
+  // Sudden swerve at cruise speed generates measurable tire drift slip
+  controller.nudgeLateral(-1);
+  const swerveTelemetry = controller.step(0.05);
+  assert.ok(swerveTelemetry.driftIntensity > 0.3, `Expected drift slip > 0.3, got ${swerveTelemetry.driftIntensity}`);
+
+  // Holding steerLeft while driving on a straight corridor swerves smoothly without losing the road
+  controller.setInput('steerLeft', true);
+  for (let i = 0; i < 15; i += 1) {
+    controller.step(0.08);
+  }
+  const woven = controller.getTelemetry();
+  assert.ok(woven.targetEdge !== null, 'Expected car to stay locked on road corridor while weaving');
+  assert.ok(woven.lateralOffset < -0.7, `Expected strong left lane shift, got ${woven.lateralOffset}`);
+  assert.ok(woven.speedKmh > 60, `Expected continuous driving speed without stalling, got ${woven.speedKmh}`);
+  controller.setInput('steerLeft', false);
+
+  // Braking cancels cruise control cleanly
+  controller.setInput('brake', true);
+  assert.equal(controller.getTelemetry().cruiseEnabled, false);
 });
 
 test('DrivingController brakes smoothly and fires dead-end callback when accelerating into uncovered direction', () => {
@@ -132,3 +171,53 @@ test('DrivingController brakes smoothly and fires dead-end callback when acceler
   assert.equal(telemetry.speedKmh, 0);
   assert.equal(deadEndCount, 1);
 });
+
+test('DrivingController elastically paces cold tiles and carries overshoot seamlessly across zero-gap handoffs', () => {
+  const nav = setupRoadCorridor();
+  const p2: PanoramaMetadata = {
+    panoId: 'road-2',
+    lat: 37.4208,
+    lng: -122.0842,
+    imageWidth: 13312,
+    imageHeight: 6656,
+    tileWidth: 512,
+    tileHeight: 512,
+    heading: 90,
+    copyright: '© 2024 Google',
+    reportProblemLink: 'https://cbks0.googleapis.com/cbk?output=report',
+    streetName: 'Charleston Rd',
+    formattedLocation: 'Charleston Rd, Mountain View',
+    links: [
+      { panoId: 'road-3', heading: 90, text: 'Charleston Rd East' },
+      { panoId: 'road-1', heading: 270, text: 'Charleston Rd West' },
+    ],
+  };
+  nav.discoverNeighbours(p2);
+
+  let advances = 0;
+  const controller = new DrivingController(nav, {
+    onAdvanceToEdge: (edge) => {
+      advances += 1;
+      // Simulate 0ms synchronous ring-buffer handoff
+      controller.setCurrentPanorama(edge.destinationPanoId, 90);
+    },
+  });
+
+  controller.setCurrentPanorama('road-1', 90);
+  controller.setInput('accelerate', true);
+
+  // Drive while next tile is still cold (isNextPanoReady = false): should hold smoothly at 0.86..0.97 without stalling
+  for (let i = 0; i < 16; i += 1) {
+    controller.step(0.08, false);
+  }
+  const held = controller.getTelemetry();
+  assert.equal(advances, 0, 'Expected elastic hold while cold tile finishes painting');
+  assert.ok(held.progressToNext >= 0.86 && held.progressToNext <= 0.98, `Expected smooth hold progress, got ${held.progressToNext}`);
+
+  // The moment the tile reports ready, it advances immediately on the very next frame with zero gap
+  const afterReady = controller.step(0.08, true);
+  assert.equal(advances, 1, 'Expected instant handoff as soon as tile reports ready');
+  assert.equal(afterReady.targetEdge?.destinationPanoId, 'road-3');
+  assert.ok(afterReady.progressToNext > 0, `Expected seamless overshoot carryover > 0, got ${afterReady.progressToNext}`);
+});
+

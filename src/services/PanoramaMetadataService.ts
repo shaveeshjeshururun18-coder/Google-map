@@ -225,7 +225,7 @@ export class PanoramaMetadataService {
     lng: number,
     signal?: AbortSignal,
   ): Promise<PanoramaMetadata | null> {
-    const radii = [150, 500, 1500];
+    const radii = [150, 500, 1500, 5000, 15000, 50000];
     for (const radius of radii) {
       try {
         return await this.getMetadataByLocation(lat, lng, radius, signal);

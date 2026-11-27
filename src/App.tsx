@@ -1,5 +1,5 @@
-import RealStreetViewDriveApp from './app/App';
+import StreetViewEngineMain from './streetViewEngine/app/Main';
 
 export default function App() {
-  return <RealStreetViewDriveApp />;
+  return <StreetViewEngineMain />;
 }

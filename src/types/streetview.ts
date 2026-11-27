@@ -84,12 +84,15 @@ export type GearMode = 'D' | 'R' | 'N';
 
 export type VehicleType = 'car' | 'bike';
 
+export type DriveMode = '3d-world' | 'street-view';
+
 export interface DrivingInputState {
   accelerate: boolean;
   brake: boolean;
   steerLeft: boolean;
   steerRight: boolean;
   handbrake: boolean;
+  boost: boolean;
 }
 
 export interface DrivingTelemetry {
@@ -97,17 +100,24 @@ export interface DrivingTelemetry {
   speedMs: number;
   maxSpeedKmh: number;
   speedRatio: number; // 0..1 normalized speed
+  rpm: number; // 0..1 normalized engine RPM synced to virtual gears
+  virtualGear: number; // 1..6 forward transmission gear
+  justShiftedGear: boolean; // one-frame pulse on upshift for exhaust pop & pitch kick
+  driftIntensity: number; // 0..1 lateral tire slip / hard brake intensity
   gear: GearMode;
   heading: number;
   steeringAngle: number;
   lateralOffset: number; // -1..1 instant lane shift offset (left..right)
   lateralVelocity: number; // instantaneous lateral swerve velocity
-  progressToNext: number; // 0..1 virtual progress between discrete panoramas
+  progressToNext: number; // 0..1 virtual progress between discrete panoramas (or RPM ratio in 3D World)
   segmentDistanceMeters: number;
   segmentDistanceEstimated: boolean;
   totalDistanceMeters: number;
   isMoving: boolean;
+  isAccelerating: boolean;
   isBraking: boolean;
+  isBoosting: boolean;
+  cruiseEnabled: boolean;
   targetEdge: PanoramaEdge | null;
 }
 
